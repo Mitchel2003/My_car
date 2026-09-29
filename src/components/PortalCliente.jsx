@@ -3,6 +3,8 @@ import {
   Clock, ShieldAlert, CheckCircle2, XCircle, Phone, 
   Car, AlertTriangle, ArrowRight, Check, Wrench
 } from 'lucide-react';
+import { VisorRayosXAuto } from './VisorRayosXAuto';
+
 
 const ESTADOS_INFO = {
   'Recibido': {
@@ -256,6 +258,13 @@ export function PortalCliente({ token, onVolverAlPanel }) {
           </div>
         </div>
       </header>
+
+      {/* Visor Interactivo Estilo Tesla / Rayos X */}
+      <VisorRayosXAuto
+        adicionales={adicionales}
+        modeloVehiculo={orden.vehiculo_modelo || orden.vehiculoModelo}
+        placa={orden.placa}
+      />
 
       {/* Progreso del Auto (Lenguaje Natural) */}
       <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 mb-6">
