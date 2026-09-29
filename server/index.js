@@ -91,10 +91,12 @@ const distPath = path.resolve(__dirname, '../dist');
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  // Fallback para SPA en Express 5 (evita error de path-to-regexp con wildcard '*')
+  app.use((req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
+
 
 app.listen(PORT, () => {
   console.log(`[Clean Architecture] Servidor ejecutándose en http://localhost:${PORT}`);
