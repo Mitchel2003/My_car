@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { Rotate3d, Sparkles, CheckCircle2, RefreshCw, ZoomIn } from 'lucide-react';
 
 export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', placa = '' }) {
@@ -10,13 +11,13 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
   const cameraRef = useRef(null);
   const autoRotateRef = useRef(true);
   const [autoRotate, setAutoRotate] = useState(true);
-  const [cargandoModelo, setCargandoModelo] = useState(true);
+  const [cargandoModelo, setCargandoModelo] = useState(false);
   const [zonaActiva, setZonaActiva] = useState('frenos_delanteros');
   const [estiloVisual, setEstiloVisual] = useState('clay'); // 'clay' | 'metalico' | 'rayosx'
   const estiloVisualRef = useRef(estiloVisual);
 
   // Refs para animación suave de cámara
-  const targetCamPosRef = useRef(new THREE.Vector3(-3.8, 2.4, 4.0));
+  const targetCamPosRef = useRef(new THREE.Vector3(-4.0, 2.5, 4.2));
   const targetLookAtRef = useRef(new THREE.Vector3(0, 0.45, 0));
 
   // Colecciones de mallas clasificadas para cambio instantáneo de materiales
@@ -55,9 +56,9 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         subtitulo: 'Sistema de Seguridad Crítica',
         descripcion: 'Discos ventilados, mordazas hidráulicas y pastillas cerámicas.',
         items: frenosDel,
-        posicion3D: [0.95, 0.36, -1.15],
-        camPos: [1.9, 0.9, -1.9],
-        camTarget: [0.8, 0.36, -1.15],
+        posicion3D: [0.95, 0.36, -1.18],
+        camPos: [2.1, 0.9, -1.8],
+        camTarget: [0.8, 0.36, -1.18],
         ...calcularEstado(frenosDel)
       },
       suspension_direccion: {
@@ -67,7 +68,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         descripcion: 'Amortiguadores hidráulicos, espirales, tijeras de suspensión y alineación.',
         items: suspension,
         posicion3D: [0, 0.45, -1.0],
-        camPos: [1.6, 1.1, -1.3],
+        camPos: [1.8, 1.2, -1.3],
         camTarget: [0, 0.45, -1.0],
         ...calcularEstado(suspension)
       },
@@ -77,7 +78,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         subtitulo: 'Mecánica y Lubricación',
         descripcion: 'Bloque motor, lubricante sintético, filtro y niveles de fluidos esenciales.',
         items: motor,
-        posicion3D: [0, 0.75, -1.55],
+        posicion3D: [0, 0.72, -1.55],
         camPos: [0, 2.2, -3.2],
         camTarget: [0, 0.65, -1.55],
         ...calcularEstado(motor)
@@ -88,9 +89,9 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         subtitulo: 'Frenado Auxiliar',
         descripcion: 'Sistema de discos/campanas traseras y freno de estacionamiento.',
         items: frenosTras,
-        posicion3D: [0.95, 0.36, 1.45],
-        camPos: [1.9, 0.9, 1.9],
-        camTarget: [0.8, 0.36, 1.45],
+        posicion3D: [0.95, 0.36, 1.48],
+        camPos: [2.1, 0.9, 1.8],
+        camTarget: [0.8, 0.36, 1.48],
         ...calcularEstado(frenosTras)
       }
     };
@@ -116,8 +117,8 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
       // Estudio Clay blanco impoluto idéntico a la imagen de referencia
       bodyMat = new THREE.MeshStandardMaterial({
         color: 0xf8fafc,
-        roughness: 0.32,
-        metalness: 0.03,
+        roughness: 0.34,
+        metalness: 0.04,
         flatShading: false
       });
     } else if (estilo === 'metalico') {
@@ -142,7 +143,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     const glassMat = estilo === 'rayosx'
       ? new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.1 })
       : new THREE.MeshStandardMaterial({
-          color: estilo === 'clay' ? 0xcfd8dc : 0x0f172a,
+          color: estilo === 'clay' ? 0x94a3b8 : 0x0f172a,
           roughness: 0.12,
           metalness: estilo === 'clay' ? 0.2 : 0.85,
           transparent: true,
@@ -167,16 +168,16 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     const brakeMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
       emissive: 0x0369a1,
-      emissiveIntensity: estilo === 'rayosx' ? 0.8 : 0.3,
+      emissiveIntensity: estilo === 'rayosx' ? 0.8 : 0.4,
       roughness: 0.3,
       metalness: 0.7
     });
 
-    groups.body.forEach(m => { m.material = bodyMat; });
-    groups.glass.forEach(m => { m.material = glassMat; });
-    groups.rims.forEach(m => { m.material = rimMat; });
-    groups.tires.forEach(m => { m.material = tireMat; });
-    groups.brakes.forEach(m => { m.material = brakeMat; });
+    groups.body.forEach(m => { if (m) m.material = bodyMat; });
+    groups.glass.forEach(m => { if (m) m.material = glassMat; });
+    groups.rims.forEach(m => { if (m) m.material = rimMat; });
+    groups.tires.forEach(m => { if (m) m.material = tireMat; });
+    groups.brakes.forEach(m => { if (m) m.material = brakeMat; });
   };
 
   useEffect(() => {
@@ -193,6 +194,136 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     }
   }, [zonaActiva, analisisZonas]);
 
+  // Función para construir el sedán procedural de alta fidelidad (render inmediato garantizado)
+  const crearAutoProcedural = (bodyMat, glassMat, rimMat, tireMat, caliperMat) => {
+    const carGroup = new THREE.Group();
+    carGroup.name = 'auto_procedural';
+
+    // 1. Chasis / Carrocería inferior con perfil aerodinámico
+    const chassisGeo = new THREE.BoxGeometry(1.82, 0.44, 4.3, 4, 2, 8);
+    const chassis = new THREE.Mesh(chassisGeo, bodyMat);
+    chassis.position.set(0, 0.44, 0);
+    chassis.castShadow = true;
+    chassis.receiveShadow = true;
+    carGroup.add(chassis);
+
+    // 2. Capó aerodinámico inclinado
+    const hoodGeo = new THREE.BoxGeometry(1.72, 0.22, 1.25);
+    const hood = new THREE.Mesh(hoodGeo, bodyMat);
+    hood.position.set(0, 0.58, -1.35);
+    hood.rotation.x = -0.09;
+    hood.castShadow = true;
+    carGroup.add(hood);
+
+    // 3. Baúl trasero con caída suave
+    const trunkGeo = new THREE.BoxGeometry(1.7, 0.24, 1.05);
+    const trunk = new THREE.Mesh(trunkGeo, bodyMat);
+    trunk.position.set(0, 0.62, 1.55);
+    trunk.rotation.x = 0.08;
+    trunk.castShadow = true;
+    carGroup.add(trunk);
+
+    // 4. Cabina / Techo curvado aerodinámico (Perfil sedán deportivo tipo Audi/Tesla)
+    const cabinShape = new THREE.Shape();
+    cabinShape.moveTo(-0.8, 0);
+    cabinShape.lineTo(-0.76, 0.22);
+    cabinShape.quadraticCurveTo(-0.55, 0.78, 0, 0.8);
+    cabinShape.quadraticCurveTo(0.55, 0.78, 0.76, 0.22);
+    cabinShape.lineTo(0.8, 0);
+    cabinShape.closePath();
+
+    const cabinGeo = new THREE.ExtrudeGeometry(cabinShape, {
+      steps: 3,
+      depth: 2.2,
+      bevelEnabled: true,
+      bevelThickness: 0.12,
+      bevelSize: 0.1,
+      bevelSegments: 4
+    });
+    cabinGeo.center();
+    const cabin = new THREE.Mesh(cabinGeo, bodyMat);
+    cabin.position.set(0, 0.92, 0.08);
+    cabin.castShadow = true;
+    carGroup.add(cabin);
+
+    // 5. Parabrisas delantero inclinado
+    const frontWindshieldGeo = new THREE.BoxGeometry(1.42, 0.56, 0.68);
+    const frontWindshield = new THREE.Mesh(frontWindshieldGeo, glassMat);
+    frontWindshield.position.set(0, 0.85, -0.78);
+    frontWindshield.rotation.x = Math.PI / 4.6;
+    carGroup.add(frontWindshield);
+
+    // 6. Luneta trasera inclinada
+    const rearWindshieldGeo = new THREE.BoxGeometry(1.38, 0.52, 0.75);
+    const rearWindshield = new THREE.Mesh(rearWindshieldGeo, glassMat);
+    rearWindshield.position.set(0, 0.86, 0.98);
+    rearWindshield.rotation.x = -Math.PI / 4.4;
+    carGroup.add(rearWindshield);
+
+    // 7. Espejos retrovisores
+    [-0.98, 0.98].forEach(x => {
+      const mirrorGeo = new THREE.BoxGeometry(0.18, 0.12, 0.22);
+      const mirror = new THREE.Mesh(mirrorGeo, bodyMat);
+      mirror.position.set(x, 0.78, -0.6);
+      mirror.castShadow = true;
+      carGroup.add(mirror);
+    });
+
+    // 8. 4 Ruedas completas con rines deportivos de 5 radios y frenos visibles
+    const wheelPositions = [
+      { x: 0.92, z: -1.18, isFront: true },  // Frontal Derecha
+      { x: -0.92, z: -1.18, isFront: true }, // Frontal Izquierda
+      { x: 0.92, z: 1.48, isFront: false },  // Trasera Derecha
+      { x: -0.92, z: 1.48, isFront: false }  // Trasera Izquierda
+    ];
+
+    wheelPositions.forEach(({ x, z }) => {
+      const wheelGroup = new THREE.Group();
+      wheelGroup.position.set(x, 0.36, z);
+
+      // Neumático
+      const tireGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.24, 28);
+      const tire = new THREE.Mesh(tireGeo, tireMat);
+      tire.rotation.z = Math.PI / 2;
+      tire.castShadow = true;
+      wheelGroup.add(tire);
+
+      // Llanta / Rim
+      const rimGeo = new THREE.CylinderGeometry(0.27, 0.27, 0.245, 24);
+      const rim = new THREE.Mesh(rimGeo, rimMat);
+      rim.rotation.z = Math.PI / 2;
+      wheelGroup.add(rim);
+
+      // 5 Radios estilo Audi
+      for (let i = 0; i < 5; i++) {
+        const spokeGeo = new THREE.BoxGeometry(0.04, 0.24, 0.03);
+        const spoke = new THREE.Mesh(spokeGeo, rimMat);
+        const angle = (i * Math.PI * 2) / 5;
+        spoke.position.set(x > 0 ? 0.11 : -0.11, Math.cos(angle) * 0.12, Math.sin(angle) * 0.12);
+        spoke.rotation.x = angle;
+        wheelGroup.add(spoke);
+      }
+
+      // Disco de freno metálico
+      const discGeo = new THREE.CylinderGeometry(0.21, 0.21, 0.03, 20);
+      const discMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.9 });
+      const disc = new THREE.Mesh(discGeo, discMat);
+      disc.rotation.z = Math.PI / 2;
+      disc.position.x = x > 0 ? 0.04 : -0.04;
+      wheelGroup.add(disc);
+
+      // Cáliper de freno luminoso
+      const caliperGeo = new THREE.BoxGeometry(0.08, 0.14, 0.09);
+      const caliper = new THREE.Mesh(caliperGeo, caliperMat);
+      caliper.position.set(x > 0 ? 0.06 : -0.06, 0.11, 0.08);
+      wheelGroup.add(caliper);
+
+      carGroup.add(wheelGroup);
+    });
+
+    return carGroup;
+  };
+
   // Inicializar escena Three.js
   useEffect(() => {
     const container = mountRef.current;
@@ -200,14 +331,14 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     // 1. Escena y Fondo de Estudio
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8fafc); // Fondo blanco-grisáceo de estudio
+    scene.background = new THREE.Color(0xf1f5f9); // Suave tono estudio con contraste
 
     const width = container.clientWidth || 600;
     const height = 400;
 
     // 2. Cámara (Ángulo isométrico 3/4 idéntico al render de referencia)
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    camera.position.set(-3.8, 2.4, 4.0);
+    camera.position.set(-4.0, 2.5, 4.2);
     cameraRef.current = camera;
 
     // 3. Renderer WebGL con mapeo de tonos y sombras de alta fidelidad
@@ -264,40 +395,99 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     // 6. Suelo de estudio infinito receptor de sombras
     const floorGeo = new THREE.PlaneGeometry(30, 30);
-    const floorMat = new THREE.ShadowMaterial({ opacity: 0.22 });
+    const floorMat = new THREE.ShadowMaterial({ opacity: 0.25 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // 7. Carga del Modelo 3D GLTF Real
+    // Sombra de contacto suave en el piso (Ambient Occlusion suelo)
+    const contactCanvas = document.createElement('canvas');
+    contactCanvas.width = 128;
+    contactCanvas.height = 128;
+    const ctx = contactCanvas.getContext('2d');
+    const grad = ctx.createRadialGradient(64, 64, 10, 64, 64, 60);
+    grad.addColorStop(0, 'rgba(15, 23, 42, 0.45)');
+    grad.addColorStop(0.5, 'rgba(15, 23, 42, 0.22)');
+    grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const contactTexture = new THREE.CanvasTexture(contactCanvas);
+    const contactShadowMat = new THREE.MeshBasicMaterial({
+      map: contactTexture,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false
+    });
+    const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4.8), contactShadowMat);
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.y = 0.01;
+    scene.add(contactShadow);
+
+    // 7. Contenedor de auto: montamos de inmediato el modelo procedural para visualización instantánea
     const carContainer = new THREE.Group();
     scene.add(carContainer);
 
-    const loader = new GLTFLoader();
-    loader.load(
+    // Materiales iniciales
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.34, metalness: 0.04 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.12, metalness: 0.2, transparent: true, opacity: 0.75 });
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.32, metalness: 0.25 });
+    const tireMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85, metalness: 0.05 });
+    const caliperMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x0369a1, emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.7 });
+
+    const autoProcedural = crearAutoProcedural(bodyMat, glassMat, rimMat, tireMat, caliperMat);
+    carContainer.add(autoProcedural);
+
+    // Clasificar mallas del procedural
+    const groups = {
+      body: [],
+      glass: [],
+      rims: [],
+      tires: [],
+      brakes: []
+    };
+
+    autoProcedural.traverse((child) => {
+      if (child.isMesh) {
+        if (child.material === glassMat) groups.glass.push(child);
+        else if (child.material === rimMat) groups.rims.push(child);
+        else if (child.material === tireMat) groups.tires.push(child);
+        else if (child.material === caliperMat) groups.brakes.push(child);
+        else groups.body.push(child);
+      }
+    });
+
+    meshGroupsRef.current = groups;
+    aplicarEstiloVisual(estiloVisualRef.current);
+
+    // 8. Intentar cargar modelo GLTF con DRACOLoader (para reemplazar con modelo de ultra-alta fidelidad)
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('/draco/');
+
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.setDRACOLoader(dracoLoader);
+
+    gltfLoader.load(
       '/car.glb',
       (gltf) => {
         const model = gltf.scene;
 
-        // Calcular caja delimitadora y centrar sobre el suelo
+        // Bounding box y centrado
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
 
-        // Escalar a dimensión estándar (~4.2 metros de largo)
         const maxDim = Math.max(size.x, size.y, size.z);
         const scaleFactor = 4.2 / maxDim;
         model.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-        // Alinear al centro y piso
         model.position.x = -center.x * scaleFactor;
         model.position.y = -box.min.y * scaleFactor;
         model.position.z = -center.z * scaleFactor;
 
-        // Clasificar mallas para materiales interactivos
-        const groups = {
+        const gltfGroups = {
           body: [],
           glass: [],
           rims: [],
@@ -312,32 +502,34 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
             const name = (child.name || '').toLowerCase();
             if (name.includes('glass') || name.includes('windshield') || name.includes('window')) {
-              groups.glass.push(child);
+              gltfGroups.glass.push(child);
             } else if (name.includes('tire') || name.includes('wheel')) {
-              groups.tires.push(child);
+              gltfGroups.tires.push(child);
             } else if (name.includes('rim') || name.includes('chrome') || name.includes('metal')) {
-              groups.rims.push(child);
+              gltfGroups.rims.push(child);
             } else if (name.includes('brake') || name.includes('caliper')) {
-              groups.brakes.push(child);
+              gltfGroups.brakes.push(child);
             } else {
-              groups.body.push(child);
+              gltfGroups.body.push(child);
             }
           }
         });
 
-        meshGroupsRef.current = groups;
+        // Reemplazar auto procedural con el modelo GLTF decodificado
+        carContainer.remove(autoProcedural);
         carContainer.add(model);
+        meshGroupsRef.current = gltfGroups;
         aplicarEstiloVisual(estiloVisualRef.current);
         setCargandoModelo(false);
       },
       undefined,
-      (error) => {
-        console.warn('Carga de GLB principal finalizada con fallback procedural:', error);
+      (err) => {
+        console.info('Manteniendo modelo 3D nativo optimizado:', err?.message || err);
         setCargandoModelo(false);
       }
     );
 
-    // 8. Marcadores 3D flotantes con anillos de pulsación diagnóstica
+    // 9. Marcadores 3D flotantes con anillos de pulsación diagnóstica
     const markersGroup = new THREE.Group();
     Object.values(analisisZonas).forEach((zona) => {
       const [mx, my, mz] = zona.posicion3D;
@@ -366,7 +558,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     });
     scene.add(markersGroup);
 
-    // 9. Raycasting para interacción táctil/clic en marcadores
+    // 10. Raycasting para interacción táctil/clic en marcadores
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
 
@@ -388,7 +580,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
 
-    // 10. Bucle de renderizado 60 FPS con interpolación suave de cámara
+    // 11. Bucle de renderizado 60 FPS con interpolación suave de cámara
     let animationFrameId;
     const clock = new THREE.Clock();
 
@@ -417,7 +609,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     animate();
 
-    // 11. Manejo responsivo del tamaño
+    // 12. Manejo responsivo del tamaño
     const handleResize = () => {
       if (!container) return;
       const w = container.clientWidth || 600;
@@ -433,6 +625,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
+      dracoLoader.dispose();
       renderer.dispose();
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
@@ -445,7 +638,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     if (!controlsRef.current || !cameraRef.current) return;
     const ctrl = controlsRef.current;
     if (vista === 'isometrica') {
-      targetCamPosRef.current.set(-3.8, 2.4, 4.0);
+      targetCamPosRef.current.set(-4.0, 2.5, 4.2);
       targetLookAtRef.current.set(0, 0.45, 0);
     } else if (vista === 'lateral') {
       targetCamPosRef.current.set(4.5, 1.2, 0);
@@ -503,7 +696,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
       </div>
 
       {/* Contenedor del Canvas WebGL */}
-      <div className="relative my-3 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center min-h-[380px]">
+      <div className="relative my-3 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center min-h-[380px]">
         <div ref={mountRef} className="w-full cursor-grab active:cursor-grabbing touch-none" />
 
         {/* Indicador de Carga */}
