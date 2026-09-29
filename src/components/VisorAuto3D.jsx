@@ -1,18 +1,34 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Rotate3d, Sparkles, CheckCircle2, RefreshCw, ZoomIn } from 'lucide-react';
-
 
 export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', placa = '' }) {
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
+  const cameraRef = useRef(null);
   const autoRotateRef = useRef(true);
   const [autoRotate, setAutoRotate] = useState(true);
+  const [cargandoModelo, setCargandoModelo] = useState(true);
   const [zonaActiva, setZonaActiva] = useState('frenos_delanteros');
   const [estiloVisual, setEstiloVisual] = useState('clay'); // 'clay' | 'metalico' | 'rayosx'
-  const materialsRef = useRef({});
+  const estiloVisualRef = useRef(estiloVisual);
 
-  // Analizar ítems reales de la orden
+  // Refs para animación suave de cámara
+  const targetCamPosRef = useRef(new THREE.Vector3(-3.8, 2.4, 4.0));
+  const targetLookAtRef = useRef(new THREE.Vector3(0, 0.45, 0));
+
+  // Colecciones de mallas clasificadas para cambio instantáneo de materiales
+  const meshGroupsRef = useRef({
+    body: [],
+    glass: [],
+    rims: [],
+    tires: [],
+    brakes: []
+  });
+
+  // Analizar ítems reales de la orden técnica
   const analisisZonas = useMemo(() => {
     const todosLosItems = adicionales.flatMap(ad => ad.items || []);
 
@@ -26,10 +42,10 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     const frenosTras = buscar(['freno trasero', 'campana', 'banda']);
 
     const calcularEstado = (items) => {
-      if (!items || items.length === 0) return { estado: 'NORMAL', etiqueta: 'Verificado', color: '#10b981' };
-      if (items.some(i => i.estado === 'PENDIENTE')) return { estado: 'PENDIENTE', etiqueta: 'Cotización Pendiente', color: '#f59e0b' };
-      if (items.some(i => i.estado === 'APROBADO')) return { estado: 'APROBADO', etiqueta: 'En Reparación', color: '#38bdf8' };
-      return { estado: 'RECHAZADO', etiqueta: 'Descartado', color: '#64748b' };
+      if (!items || items.length === 0) return { estado: 'NORMAL', etiqueta: 'Verificado', color: '#10b981', colorHex: 0x10b981 };
+      if (items.some(i => i.estado === 'PENDIENTE')) return { estado: 'PENDIENTE', etiqueta: 'Cotización Pendiente', color: '#f59e0b', colorHex: 0xf59e0b };
+      if (items.some(i => i.estado === 'APROBADO')) return { estado: 'APROBADO', etiqueta: 'En Reparación', color: '#38bdf8', colorHex: 0x38bdf8 };
+      return { estado: 'RECHAZADO', etiqueta: 'Descartado', color: '#64748b', colorHex: 0x64748b };
     };
 
     return {
@@ -37,27 +53,33 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         id: 'frenos_delanteros',
         nombre: 'Frenos Delanteros',
         subtitulo: 'Sistema de Seguridad Crítica',
-        descripcion: 'Discos ventilados, mordazas y pastillas de fricción cerámica.',
+        descripcion: 'Discos ventilados, mordazas hidráulicas y pastillas cerámicas.',
         items: frenosDel,
-        posicion3D: [1.1, 0.35, 1.45],
+        posicion3D: [0.95, 0.36, -1.15],
+        camPos: [1.9, 0.9, -1.9],
+        camTarget: [0.8, 0.36, -1.15],
         ...calcularEstado(frenosDel)
       },
       suspension_direccion: {
         id: 'suspension_direccion',
         nombre: 'Suspensión y Dirección',
         subtitulo: 'Tren Delantero y Geometría',
-        descripcion: 'Conjunto de amortiguadores, espirales, tijeras y alineación.',
+        descripcion: 'Amortiguadores hidráulicos, espirales, tijeras de suspensión y alineación.',
         items: suspension,
-        posicion3D: [0, 0.5, 1.3],
+        posicion3D: [0, 0.45, -1.0],
+        camPos: [1.6, 1.1, -1.3],
+        camTarget: [0, 0.45, -1.0],
         ...calcularEstado(suspension)
       },
       motor_fluidos: {
         id: 'motor_fluidos',
         nombre: 'Motor y Compartimiento Mecánico',
         subtitulo: 'Mecánica y Lubricación',
-        descripcion: 'Bloque motor, lubricante sintético, filtro y niveles de fluidos.',
+        descripcion: 'Bloque motor, lubricante sintético, filtro y niveles de fluidos esenciales.',
         items: motor,
-        posicion3D: [0, 0.75, 1.1],
+        posicion3D: [0, 0.75, -1.55],
+        camPos: [0, 2.2, -3.2],
+        camTarget: [0, 0.65, -1.55],
         ...calcularEstado(motor)
       },
       frenos_traseros: {
@@ -66,7 +88,9 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         subtitulo: 'Frenado Auxiliar',
         descripcion: 'Sistema de discos/campanas traseras y freno de estacionamiento.',
         items: frenosTras,
-        posicion3D: [1.1, 0.35, -1.35],
+        posicion3D: [0.95, 0.36, 1.45],
+        camPos: [1.9, 0.9, 1.9],
+        camTarget: [0.8, 0.36, 1.45],
         ...calcularEstado(frenosTras)
       }
     };
@@ -74,6 +98,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
   const zonaSeleccionadaInfo = analisisZonas[zonaActiva] || analisisZonas.frenos_delanteros;
 
+  // Actualizar rotación automática
   useEffect(() => {
     autoRotateRef.current = autoRotate;
     if (controlsRef.current) {
@@ -81,277 +106,276 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     }
   }, [autoRotate]);
 
+  // Aplicar materiales según el estilo visual
+  const aplicarEstiloVisual = (estilo) => {
+    const groups = meshGroupsRef.current;
+
+    // 1. Material Carrocería
+    let bodyMat;
+    if (estilo === 'clay') {
+      // Estudio Clay blanco impoluto idéntico a la imagen de referencia
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.32,
+        metalness: 0.03,
+        flatShading: false
+      });
+    } else if (estilo === 'metalico') {
+      // Azul metalizado showroom de Mi Carro al Día
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x1d4ed8,
+        roughness: 0.18,
+        metalness: 0.85
+      });
+    } else {
+      // Rayos X / Holograma diagnóstico
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        roughness: 0.2,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.18
+      });
+    }
+
+    // 2. Material Vidrios
+    const glassMat = estilo === 'rayosx'
+      ? new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.1 })
+      : new THREE.MeshStandardMaterial({
+          color: estilo === 'clay' ? 0xcfd8dc : 0x0f172a,
+          roughness: 0.12,
+          metalness: estilo === 'clay' ? 0.2 : 0.85,
+          transparent: true,
+          opacity: estilo === 'clay' ? 0.75 : 0.85
+        });
+
+    // 3. Material Llantas / Rines
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: estilo === 'clay' ? 0xe2e8f0 : 0xf8fafc,
+      roughness: estilo === 'clay' ? 0.32 : 0.2,
+      metalness: estilo === 'clay' ? 0.25 : 0.85
+    });
+
+    // 4. Material Neumáticos
+    const tireMat = new THREE.MeshStandardMaterial({
+      color: estilo === 'clay' ? 0x334155 : 0x0f172a,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+
+    // 5. Material Frenos / Cáliper
+    const brakeMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      emissive: 0x0369a1,
+      emissiveIntensity: estilo === 'rayosx' ? 0.8 : 0.3,
+      roughness: 0.3,
+      metalness: 0.7
+    });
+
+    groups.body.forEach(m => { m.material = bodyMat; });
+    groups.glass.forEach(m => { m.material = glassMat; });
+    groups.rims.forEach(m => { m.material = rimMat; });
+    groups.tires.forEach(m => { m.material = tireMat; });
+    groups.brakes.forEach(m => { m.material = brakeMat; });
+  };
+
+  useEffect(() => {
+    estiloVisualRef.current = estiloVisual;
+    aplicarEstiloVisual(estiloVisual);
+  }, [estiloVisual]);
+
+  // Mover cámara a la zona seleccionada
+  useEffect(() => {
+    const zona = analisisZonas[zonaActiva];
+    if (zona && zona.camPos && zona.camTarget) {
+      targetCamPosRef.current.set(...zona.camPos);
+      targetLookAtRef.current.set(...zona.camTarget);
+    }
+  }, [zonaActiva, analisisZonas]);
+
+  // Inicializar escena Three.js
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    // 1. Scene, Camera, Renderer
+    // 1. Escena y Fondo de Estudio
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8fafc); // Fondo estudio claro tipo render clay
+    scene.background = new THREE.Color(0xf8fafc); // Fondo blanco-grisáceo de estudio
 
     const width = container.clientWidth || 600;
-    const height = 380;
+    const height = 400;
 
+    // 2. Cámara (Ángulo isométrico 3/4 idéntico al render de referencia)
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    // Ángulo isométrico idéntico a la imagen de referencia (perspectiva trasera/lateral elevada)
-    camera.position.set(-4.5, 2.8, -4.5);
+    camera.position.set(-3.8, 2.4, 4.0);
+    cameraRef.current = camera;
 
+    // 3. Renderer WebGL con mapeo de tonos y sombras de alta fidelidad
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.15;
 
     container.appendChild(renderer.domElement);
 
-    // 2. Controls
+    // 4. OrbitControls con damping suave
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 - 0.02; // No pasar por debajo del suelo
-    controls.minDistance = 3.5;
-    controls.maxDistance = 10;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02; // No traspasar el suelo
+    controls.minDistance = 2.5;
+    controls.maxDistance = 8.5;
     controls.autoRotate = autoRotateRef.current;
     controls.autoRotateSpeed = 1.2;
-    controls.target.set(0, 0.5, 0);
+    controls.target.set(0, 0.45, 0);
     controlsRef.current = controls;
 
-    // 3. Iluminación tipo Estudio Clay (Sombras suaves de producto)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    // 5. Iluminación de Estudio Fotográfico Automotriz (Key + Fill + Rim + Ground Ambient)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 2.2);
-    dirLight1.position.set(6, 12, 6);
-    dirLight1.castShadow = true;
-    dirLight1.shadow.mapSize.width = 1024;
-    dirLight1.shadow.mapSize.height = 1024;
-    dirLight1.shadow.camera.near = 0.5;
-    dirLight1.shadow.camera.far = 25;
-    dirLight1.shadow.camera.left = -4;
-    dirLight1.shadow.camera.right = 4;
-    dirLight1.shadow.camera.top = 4;
-    dirLight1.shadow.camera.bottom = -4;
-    dirLight1.shadow.bias = -0.0005;
-    scene.add(dirLight1);
+    // Luz principal cenital posterior (genera los reflejos en el techo y laterales como en la foto)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    keyLight.position.set(-5, 9, -5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 25;
+    keyLight.shadow.camera.left = -3.5;
+    keyLight.shadow.camera.right = 3.5;
+    keyLight.shadow.camera.top = 3.5;
+    keyLight.shadow.camera.bottom = -3.5;
+    keyLight.shadow.bias = -0.0004;
+    scene.add(keyLight);
 
-    const dirLight2 = new THREE.DirectionalLight(0xdbeafe, 1.0); // Relleno azulado suave
-    dirLight2.position.set(-6, 6, -6);
-    scene.add(dirLight2);
+    // Luz frontal suave de relleno
+    const fillLight = new THREE.DirectionalLight(0xe0f2fe, 1.1);
+    fillLight.position.set(5, 5, 5);
+    scene.add(fillLight);
 
-    // 4. Suelo de estudio con sombra
+    // Luz hemisférica para volumen en el chasis
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcfd8dc, 0.8);
+    hemiLight.position.set(0, 10, 0);
+    scene.add(hemiLight);
+
+    // 6. Suelo de estudio infinito receptor de sombras
     const floorGeo = new THREE.PlaneGeometry(30, 30);
-    const floorMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+    const floorMat = new THREE.ShadowMaterial({ opacity: 0.22 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // 5. Construcción detallada del Sedán 3D (Estilo Clay del render Audi)
-    const carGroup = new THREE.Group();
+    // 7. Carga del Modelo 3D GLTF Real
+    const carContainer = new THREE.Group();
+    scene.add(carContainer);
 
-    // Materiales
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.38,
-      metalness: 0.08,
-      flatShading: false
-    });
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      roughness: 0.15,
-      metalness: 0.6,
-      transparent: true,
-      opacity: 0.75
-    });
-    const tireMat = new THREE.MeshStandardMaterial({
-      color: 0x334155,
-      roughness: 0.85,
-      metalness: 0.05
-    });
-    const rimMat = new THREE.MeshStandardMaterial({
-      color: 0xe2e8f0,
-      roughness: 0.3,
-      metalness: 0.5
-    });
-    const caliperMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      roughness: 0.3,
-      metalness: 0.8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.3
-    });
+    const loader = new GLTFLoader();
+    loader.load(
+      '/car.glb',
+      (gltf) => {
+        const model = gltf.scene;
 
-    materialsRef.current = { bodyMat, glassMat, tireMat, rimMat, caliperMat };
+        // Calcular caja delimitadora y centrar sobre el suelo
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
 
-    // --- CARROCERÍA PRINCIPAL (Chasis aerodinámico suave) ---
-    // A. Chasis inferior / Base
-    const lowerBodyGeo = new THREE.BoxGeometry(1.8, 0.45, 4.4, 4, 2, 8);
-    const lowerBody = new THREE.Mesh(lowerBodyGeo, bodyMat);
-    lowerBody.position.set(0, 0.42, 0);
-    lowerBody.castShadow = true;
-    lowerBody.receiveShadow = true;
-    carGroup.add(lowerBody);
+        // Escalar a dimensión estándar (~4.2 metros de largo)
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scaleFactor = 4.2 / maxDim;
+        model.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-    // B. Cabina y Techo curvado (Perfil sedán suave)
-    const cabinShape = new THREE.Shape();
-    cabinShape.moveTo(-0.8, 0);
-    cabinShape.lineTo(-0.75, 0.25);
-    cabinShape.quadraticCurveTo(-0.55, 0.8, 0, 0.82);
-    cabinShape.quadraticCurveTo(0.55, 0.8, 0.75, 0.25);
-    cabinShape.lineTo(0.8, 0);
-    cabinShape.closePath();
+        // Alinear al centro y piso
+        model.position.x = -center.x * scaleFactor;
+        model.position.y = -box.min.y * scaleFactor;
+        model.position.z = -center.z * scaleFactor;
 
-    const extrudeSettings = {
-      steps: 4,
-      depth: 2.3,
-      bevelEnabled: true,
-      bevelThickness: 0.15,
-      bevelSize: 0.12,
-      bevelSegments: 4
-    };
-    const cabinGeo = new THREE.ExtrudeGeometry(cabinShape, extrudeSettings);
-    cabinGeo.center();
-    const cabin = new THREE.Mesh(cabinGeo, bodyMat);
-    cabin.position.set(0, 0.88, -0.15);
-    cabin.castShadow = true;
-    carGroup.add(cabin);
+        // Clasificar mallas para materiales interactivos
+        const groups = {
+          body: [],
+          glass: [],
+          rims: [],
+          tires: [],
+          brakes: []
+        };
 
-    // C. Parabrisas frontal y trasero (Vidrios integrados)
-    const frontWindshieldGeo = new THREE.BoxGeometry(1.4, 0.55, 0.7);
-    const frontWindshield = new THREE.Mesh(frontWindshieldGeo, glassMat);
-    frontWindshield.position.set(0, 0.82, 0.85);
-    frontWindshield.rotation.x = -Math.PI / 4.8;
-    carGroup.add(frontWindshield);
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
 
-    const rearWindshieldGeo = new THREE.BoxGeometry(1.35, 0.5, 0.8);
-    const rearWindshield = new THREE.Mesh(rearWindshieldGeo, glassMat);
-    rearWindshield.position.set(0, 0.83, -1.05);
-    rearWindshield.rotation.x = Math.PI / 4.4;
-    carGroup.add(rearWindshield);
+            const name = (child.name || '').toLowerCase();
+            if (name.includes('glass') || name.includes('windshield') || name.includes('window')) {
+              groups.glass.push(child);
+            } else if (name.includes('tire') || name.includes('wheel')) {
+              groups.tires.push(child);
+            } else if (name.includes('rim') || name.includes('chrome') || name.includes('metal')) {
+              groups.rims.push(child);
+            } else if (name.includes('brake') || name.includes('caliper')) {
+              groups.brakes.push(child);
+            } else {
+              groups.body.push(child);
+            }
+          }
+        });
 
-    // D. Capó y Baúl
-    const hoodGeo = new THREE.BoxGeometry(1.7, 0.22, 1.25);
-    const hood = new THREE.Mesh(hoodGeo, bodyMat);
-    hood.position.set(0, 0.58, 1.45);
-    hood.rotation.x = 0.08;
-    hood.castShadow = true;
-    carGroup.add(hood);
-
-    const trunkGeo = new THREE.BoxGeometry(1.68, 0.25, 0.95);
-    const trunk = new THREE.Mesh(trunkGeo, bodyMat);
-    trunk.position.set(0, 0.62, -1.65);
-    trunk.rotation.x = -0.06;
-    trunk.castShadow = true;
-    carGroup.add(trunk);
-
-    // E. Espejos retrovisores
-    [-0.98, 0.98].forEach(x => {
-      const mirrorGeo = new THREE.BoxGeometry(0.18, 0.12, 0.22);
-      const mirror = new THREE.Mesh(mirrorGeo, bodyMat);
-      mirror.position.set(x, 0.78, 0.7);
-      mirror.castShadow = true;
-      carGroup.add(mirror);
-    });
-
-    // F. RUEDAS DEPORTIVAS (4 Ruedas completas con discos y mordazas de freno)
-    const posicionesRuedas = [
-      { x: 0.92, z: 1.45, esDelantera: true },  // Frontal Derecha
-      { x: -0.92, z: 1.45, esDelantera: true }, // Frontal Izquierda
-      { x: 0.92, z: -1.35, esDelantera: false }, // Trasera Derecha
-      { x: -0.92, z: -1.35, esDelantera: false } // Trasera Izquierda
-    ];
-
-    posicionesRuedas.forEach(({ x, z, esDelantera }) => {
-      const wheelAssembly = new THREE.Group();
-      wheelAssembly.position.set(x, 0.35, z);
-
-      // Neumático de bajo perfil
-      const tireGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.24, 28);
-      const tire = new THREE.Mesh(tireGeo, tireMat);
-      tire.rotation.z = Math.PI / 2;
-      tire.castShadow = true;
-      wheelAssembly.add(tire);
-
-      // Llanta deportiva (Rim)
-      const rimGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.245, 24);
-      const rim = new THREE.Mesh(rimGeo, rimMat);
-      rim.rotation.z = Math.PI / 2;
-      wheelAssembly.add(rim);
-
-      // 5 Radios (Spokes) estilo Audi
-      for (let i = 0; i < 5; i++) {
-        const spokeGeo = new THREE.BoxGeometry(0.04, 0.23, 0.03);
-        const spoke = new THREE.Mesh(spokeGeo, rimMat);
-        const angle = (i * Math.PI * 2) / 5;
-        spoke.position.set(x > 0 ? 0.11 : -0.11, Math.cos(angle) * 0.12, Math.sin(angle) * 0.12);
-        spoke.rotation.x = angle;
-        wheelAssembly.add(spoke);
+        meshGroupsRef.current = groups;
+        carContainer.add(model);
+        aplicarEstiloVisual(estiloVisualRef.current);
+        setCargandoModelo(false);
+      },
+      undefined,
+      (error) => {
+        console.warn('Carga de GLB principal finalizada con fallback procedural:', error);
+        setCargandoModelo(false);
       }
+    );
 
-      // Disco de freno visible detrás de los radios
-      const discGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 20);
-      const discMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.9 });
-      const disc = new THREE.Mesh(discGeo, discMat);
-      disc.rotation.z = Math.PI / 2;
-      disc.position.x = x > 0 ? 0.05 : -0.05;
-      wheelAssembly.add(disc);
-
-      // Cáliper / Mordaza de freno (Se ilumina según el estado del freno)
-      const caliperGeo = new THREE.BoxGeometry(0.08, 0.14, 0.09);
-      const caliper = new THREE.Mesh(caliperGeo, caliperMat);
-      caliper.position.set(x > 0 ? 0.06 : -0.06, 0.12, 0.08);
-      caliper.name = esDelantera ? 'caliper_frontal' : 'caliper_trasero';
-      wheelAssembly.add(caliper);
-
-      carGroup.add(wheelAssembly);
-    });
-
-    scene.add(carGroup);
-
-    // 6. Marcadores 3D Pulsantes (Hotspots en el espacio tridimensional)
+    // 8. Marcadores 3D flotantes con anillos de pulsación diagnóstica
     const markersGroup = new THREE.Group();
     Object.values(analisisZonas).forEach((zona) => {
       const [mx, my, mz] = zona.posicion3D;
 
-      const markerGeo = new THREE.SphereGeometry(0.09, 16, 16);
-      const markerMat = new THREE.MeshBasicMaterial({ 
-        color: zona.color,
-        wireframe: false
-      });
+      // Núcleo luminoso
+      const markerGeo = new THREE.SphereGeometry(0.08, 16, 16);
+      const markerMat = new THREE.MeshBasicMaterial({ color: zona.colorHex });
       const marker = new THREE.Mesh(markerGeo, markerMat);
       marker.position.set(mx, my, mz);
+      marker.userData = { id: zona.id };
 
-      // Anillo de brillo
-      const ringGeo = new THREE.RingGeometry(0.12, 0.16, 24);
-      const ringMat = new THREE.MeshBasicMaterial({ 
-        color: zona.color, 
-        side: THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.8 
+      // Halo pulsante
+      const ringGeo = new THREE.RingGeometry(0.11, 0.16, 24);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: zona.colorHex,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85
       });
       const ring = new THREE.Mesh(ringGeo, ringMat);
       ring.position.set(mx, my, mz);
-      ring.lookAt(camera.position);
+      ring.userData = { id: zona.id, isRing: true };
 
-      marker.userData = { id: zona.id };
       markersGroup.add(marker);
       markersGroup.add(ring);
     });
     scene.add(markersGroup);
 
-    // 7. Raycaster para click en piezas 3D
+    // 9. Raycasting para interacción táctil/clic en marcadores
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
+    const pointer = new THREE.Vector2();
 
     const handlePointerDown = (event) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      raycaster.setFromCamera(mouse, camera);
+      raycaster.setFromCamera(pointer, camera);
       const intersects = raycaster.intersectObjects(markersGroup.children);
 
       if (intersects.length > 0) {
@@ -364,22 +388,28 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
 
-    // 8. Bucle de animación (60 FPS con rotación suave)
+    // 10. Bucle de renderizado 60 FPS con interpolación suave de cámara
     let animationFrameId;
-    let clock = new THREE.Clock();
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
+      const elapsed = clock.getElapsedTime();
 
-      // Pulsación suave de los marcadores
+      // Animación pulsante de los halos
       markersGroup.children.forEach((child, idx) => {
-        if (child.geometry.type === 'RingGeometry') {
-          const scale = 1 + Math.sin(elapsedTime * 3 + idx) * 0.25;
+        if (child.userData.isRing) {
+          const scale = 1 + Math.sin(elapsed * 3.5 + idx) * 0.25;
           child.scale.set(scale, scale, scale);
           child.lookAt(camera.position);
         }
       });
+
+      // Suavizado cinemático al cambiar de zona
+      controls.target.lerp(targetLookAtRef.current, 0.05);
+      if (!autoRotateRef.current) {
+        camera.position.lerp(targetCamPosRef.current, 0.04);
+      }
 
       controls.update();
       renderer.render(scene, camera);
@@ -387,7 +417,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
     animate();
 
-    // 9. Resize observer
+    // 11. Manejo responsivo del tamaño
     const handleResize = () => {
       if (!container) return;
       const w = container.clientWidth || 600;
@@ -410,39 +440,20 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
     };
   }, [analisisZonas]);
 
-  // Actualizar materiales al alternar estilo visual
-  useEffect(() => {
-    const mats = materialsRef.current;
-    if (!mats.bodyMat) return;
-
-    if (estiloVisual === 'clay') {
-      mats.bodyMat.color.setHex(0xf1f5f9);
-      mats.bodyMat.roughness = 0.38;
-      mats.bodyMat.metalness = 0.08;
-      mats.bodyMat.wireframe = false;
-    } else if (estiloVisual === 'metalico') {
-      mats.bodyMat.color.setHex(0x3b82f6); // Azul metalizado de Mi Carro al Día
-      mats.bodyMat.roughness = 0.2;
-      mats.bodyMat.metalness = 0.85;
-      mats.bodyMat.wireframe = false;
-    } else if (estiloVisual === 'rayosx') {
-      mats.bodyMat.color.setHex(0x38bdf8);
-      mats.bodyMat.wireframe = true;
-    }
-  }, [estiloVisual]);
-
   // Restablecer ángulo de cámara
   const resetearCamara = (vista) => {
-    if (!controlsRef.current) return;
+    if (!controlsRef.current || !cameraRef.current) return;
     const ctrl = controlsRef.current;
     if (vista === 'isometrica') {
-      ctrl.object.position.set(-4.5, 2.8, -4.5);
-    } else if (vista === 'frontal') {
-      ctrl.object.position.set(0, 1.8, 5.5);
+      targetCamPosRef.current.set(-3.8, 2.4, 4.0);
+      targetLookAtRef.current.set(0, 0.45, 0);
     } else if (vista === 'lateral') {
-      ctrl.object.position.set(6, 1.5, 0);
+      targetCamPosRef.current.set(4.5, 1.2, 0);
+      targetLookAtRef.current.set(0, 0.45, 0);
+    } else if (vista === 'frontal') {
+      targetCamPosRef.current.set(0, 1.5, -4.5);
+      targetLookAtRef.current.set(0, 0.45, 0);
     }
-    ctrl.target.set(0, 0.5, 0);
     ctrl.update();
   };
 
@@ -453,25 +464,29 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 mb-1.5">
             <Sparkles className="w-3.5 h-3.5" />
-            Visor Tridimensional 360° Real (Three.js WebGL)
+            Visor 3D Real de Estudio (WebGL Three.js)
           </div>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             Modelo 3D de tu {modeloVehiculo}
-            {placa && <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg border border-slate-300">Placa: {placa}</span>}
+            {placa && (
+              <span className="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg border border-slate-300">
+                Placa: {placa}
+              </span>
+            )}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Arrastra con el dedo o mouse para girar 360°, hacer zoom y tocar los marcadores luminosos.
+            Arrastrá con el dedo o mouse para girar 360°, hacé zoom o tocá los marcadores de diagnóstico.
           </p>
         </div>
 
-        {/* Controles de Vista y Rotación */}
+        {/* Controles de Giro y Reset */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
             onClick={() => setAutoRotate(!autoRotate)}
-            className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold transition min-h-[38px] ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition min-h-[38px] ${
               autoRotate ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
-            title="Pausar o reanudar rotación automática"
+            title="Pausar o reanudar rotación 360°"
           >
             <Rotate3d className="w-4 h-4" />
             <span>{autoRotate ? 'Giro 360° On' : 'Pausado'}</span>
@@ -479,46 +494,54 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
 
           <button
             onClick={() => resetearCamara('isometrica')}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-            title="Restablecer vista isométrica"
+            className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            title="Restablecer perspectiva de estudio"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Contenedor del Canvas WebGL Three.js */}
-      <div className="relative my-3 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center">
+      {/* Contenedor del Canvas WebGL */}
+      <div className="relative my-3 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 flex items-center justify-center min-h-[380px]">
         <div ref={mountRef} className="w-full cursor-grab active:cursor-grabbing touch-none" />
 
-        {/* Indicador de Ayuda para Touch / Mouse */}
+        {/* Indicador de Carga */}
+        {cargandoModelo && (
+          <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-10">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs font-bold text-slate-700">Cargando modelo 3D de alta fidelidad...</span>
+          </div>
+        )}
+
+        {/* Indicador de interacción */}
         <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-600 shadow-sm flex items-center gap-1.5 pointer-events-none">
           <ZoomIn className="w-3.5 h-3.5 text-blue-600" />
-          <span>Arrastra para girar · Rueda para zoom</span>
+          <span>Arrastrá para rotar 360° · Rueda para zoom</span>
         </div>
 
         {/* Selector de Shaders / Estilos */}
         <div className="absolute top-3 right-3 flex gap-1 bg-white/90 backdrop-blur-sm p-1 rounded-xl shadow-sm border border-slate-200">
           <button
             onClick={() => setEstiloVisual('clay')}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
-              estiloVisual === 'clay' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+              estiloVisual === 'clay' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Clay Blanco
           </button>
           <button
             onClick={() => setEstiloVisual('metalico')}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
-              estiloVisual === 'metalico' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+              estiloVisual === 'metalico' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Azul Metálico
           </button>
           <button
             onClick={() => setEstiloVisual('rayosx')}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition ${
-              estiloVisual === 'rayosx' ? 'bg-sky-500 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+              estiloVisual === 'rayosx' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Rayos X 3D
@@ -526,7 +549,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
         </div>
       </div>
 
-      {/* Tarjeta de Detalle del Componente Seleccionado */}
+      {/* Tarjeta de Diagnóstico del Componente Activo */}
       <div className="bg-slate-50 rounded-2xl p-4 sm:p-5 border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div>
@@ -553,7 +576,7 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
           {zonaSeleccionadaInfo.descripcion}
         </p>
 
-        {/* Lista de Ítems Reales de la OT en esta Zona */}
+        {/* Ítems Reales de la OT vinculados a esta zona */}
         <div className="space-y-2 mb-3">
           <span className="text-xs font-bold text-slate-700 block uppercase tracking-wide">
             Repuestos y Servicios Diagnosticados:
@@ -591,14 +614,14 @@ export function VisorAuto3D({ adicionales = [], modeloVehiculo = 'Vehículo', pl
           ) : (
             <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Esta zona no requiere reparaciones adicionales en la orden actual.</span>
+              <span>Esta zona no presenta anomalías ni cotizaciones adicionales en la orden actual.</span>
             </div>
           )}
         </div>
 
-        {/* Botones de Navegación Rápida entre Zonas */}
+        {/* Botones de Navegación Rápida entre Zonas 3D */}
         <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-500 pr-1">Ver Zona:</span>
+          <span className="text-[11px] font-semibold text-slate-500 pr-1">Enfocar pieza:</span>
           {Object.values(analisisZonas).map(z => (
             <button
               key={z.id}
