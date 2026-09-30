@@ -32,6 +32,8 @@ import { AdicionalController } from './infrastructure/http/controllers/Adicional
 import { InboxController } from './infrastructure/http/controllers/InboxController.js';
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
 import { SuperAdminController } from './infrastructure/http/controllers/SuperAdminController.js';
+import { HealthController } from './infrastructure/http/controllers/HealthController.js';
+import { db } from './infrastructure/database/connection.js';
 import { configurarRutas } from './infrastructure/http/routes.js';
 
 // Inicialización de la base de datos relacional
@@ -67,6 +69,7 @@ const adicionalController = new AdicionalController({
 const inboxController = new InboxController({ obtenerInboxAsesorUseCase });
 const authController = new AuthController({ loginUseCase, tenantRepository, usuarioRepository });
 const superAdminController = new SuperAdminController({ tenantRepository, usuarioRepository });
+const healthController = new HealthController(db);
 
 // Servidor Express
 const app = express();
@@ -75,13 +78,17 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Endpoint de monitoreo / salud para UptimeRobot y Render (GET /health)
+app.get('/health', healthController.check);
+
 const apiRoutes = configurarRutas({
   tenantController,
   ordenController,
   adicionalController,
   inboxController,
   authController,
-  superAdminController
+  superAdminController,
+  healthController
 });
 
 app.use('/api', apiRoutes);

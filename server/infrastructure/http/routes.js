@@ -8,9 +8,15 @@ export function configurarRutas({
   adicionalController,
   inboxController,
   authController,
-  superAdminController
+  superAdminController,
+  healthController
 }) {
   const router = Router();
+
+  // 0. Health check para UptimeRobot y Render (/api/health)
+  if (healthController) {
+    router.get('/health', healthController.check);
+  }
 
   // 1. Autenticación (M8.3)
   router.post('/auth/login', authController.login);
